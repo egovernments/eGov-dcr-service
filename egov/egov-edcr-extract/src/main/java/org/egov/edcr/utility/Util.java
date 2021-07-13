@@ -139,7 +139,7 @@ public class Util {
         if (dxfDocument.containsDXFLayer(name)) {
             DXFLayer dxfLayer = dxfDocument.getDXFLayer(name);
             List<DXFDimension> dimensions = dxfLayer.getDXFEntities(DXFConstants.ENTITY_TYPE_DIMENSION);
-            if(dimensions != null)
+            if (dimensions != null)
                 return dimensions;
         }
         return Collections.emptyList();
@@ -285,7 +285,7 @@ public class Util {
 
     }
 
-    public static void extractDimensionValue(PlanDetail planDetail, List<BigDecimal> values, DXFDimension line,
+    public static void extractDimensionValue(PlanDetail planDetail, List<BigDecimal> dimensionValues, DXFDimension line,
             String layerName) {
         DXFDocument dxfDocument = planDetail.getDoc();
         String dimensionBlock = line.getDimensionBlock();
@@ -305,14 +305,14 @@ public class Util {
                         StyledTextParagraph next = (StyledTextParagraph) styledParagraphIterator.next();
                         text2 = next.getText();
                     }
-                    
+
                     if (planDetail.getDrawingPreference() != null &&
                             org.egov.infra.utils.StringUtils.isNotBlank(planDetail.getDrawingPreference().getUom())
                             && (DxfFileConstants.INCH_UOM.equalsIgnoreCase(planDetail.getDrawingPreference().getUom())
                                     || DxfFileConstants.FEET_UOM.equalsIgnoreCase(planDetail.getDrawingPreference().getUom()))
                             && StringUtils.isNotBlank(text2)) {
                         BigDecimal convertedValue = convertToInch(text2);
-                        values.add(convertedValue);
+                        dimensionValues.add(convertedValue);
                     } else {
                         if (text2.contains(";")) {
                             String[] textSplit = text2.split(";");
@@ -328,14 +328,18 @@ public class Util {
                             text2 = text2.replaceAll("[^\\d.]", "");
 
                         if (!text2.isEmpty())
-                            values.add(BigDecimal.valueOf(Double.parseDouble(text2)));
+                            dimensionValues.add(BigDecimal.valueOf(Double.parseDouble(text2)));
                     }
+
                 }
             }
         } else {
             List<DXFLine> lines = new ArrayList<>();
             String text2 = null;
             Iterator dxfEntitiesIterator = dxfBlock.getDXFEntitiesIterator();
+            List<BigDecimal> values = new ArrayList<>();
+            List<BigDecimal> specialValues = new ArrayList<>();
+            List<BigDecimal> byWeight = new ArrayList<>();
             while (dxfEntitiesIterator.hasNext()) {
                 DXFEntity e = (DXFEntity) dxfEntitiesIterator.next();
                 if (e.getType().equals(DXFConstants.ENTITY_TYPE_LINE)) {
@@ -344,8 +348,17 @@ public class Util {
                     BigDecimal dub1 = new BigDecimal(dxfLine.getLength());
                     dub1 = dub1.setScale(DcrConstants.DECIMALDIGITS_MEASUREMENTS, DcrConstants.ROUNDMODE_MEASUREMENTS);
                     values.add(dub1);
-                    LOG.info("line length=" + dxfLine.getLength() + " Layer Name :      " + line.getLayerName() + "Style"
-                            + line.getDimensionStyleID());
+                    if (dxfLine.getLineType().equalsIgnoreCase("Continuous")) {
+                        specialValues.add(dub1);
+                    }
+
+                    if (dxfLine.getLineWeight() == 20) {
+                        byWeight.add(dub1);
+                    }
+                    LOG.error("line length=" + dxfLine.getLength() + " Layer Name : " + line.getLayerName() + "Style"
+                            + line.getDimensionStyleID() + " type:" + dxfLine.getType() + " Line Type "
+                            + dxfLine.getLineType() + " " + dxfLine.getLineWeight());
+
                 }
 
                 if (e.getType().equals(DXFConstants.ENTITY_TYPE_MTEXT)) {
@@ -376,10 +389,30 @@ public class Util {
             }
 
             if (values.size() != 3) {
-                planDetail.getErrors().put(layerName + "-" + DcrConstants.DIMENSION_LINES_STANDARD,
-                        "Dimension " + text2 + " marked in layer " + layerName + " is not as per defined standard.");
+                planDetail.getErrors().put(layerName + "-" + DcrConstants.DIMENSION_LINES_STANDARD, "Dimension " + text2
+                        + " marked in layer " + layerName + " is not as per DIGIT-DCR defined standard.");
             }
 
+            if (values.size() > 2) {
+                BigDecimal value1 = roundOffTwoDecimal(values.get(0));
+                BigDecimal value2 = roundOffTwoDecimal(values.get(1));
+                BigDecimal value3 = roundOffTwoDecimal(values.get(2));
+
+                if (value1.compareTo(value2) == 0) {
+                    values.remove(1);
+                    values.remove(0);
+
+                } else if (value2.compareTo(value3) == 0) {
+                    values.remove(2);
+                    values.remove(1);
+
+                } else if (value1.compareTo(value3) == 0) {
+                    values.remove(2);
+                    values.remove(0);
+
+                }
+            }
+            LOG.error("Before Delete ArrayList : " + values);
             Iterator itr = values.iterator();
             int count = 0;
             while (itr.hasNext()) {
@@ -392,21 +425,49 @@ public class Util {
 
             LOG.error("Modified ArrayList : " + values);
             LOG.error("Dimension text : " + text2);
-            BigDecimal dimDecimal = BigDecimal.ZERO;
+            BigDecimal textValue = BigDecimal.ZERO;
             if (StringUtils.isNotBlank(text2)) {
-                dimDecimal = BigDecimal.valueOf(Double.parseDouble(text2)).setScale(DcrConstants.DECIMALDIGITS_MEASUREMENTS,
-                        DcrConstants.ROUNDMODE_MEASUREMENTS);
+                textValue = BigDecimal.valueOf(Double.parseDouble(text2))
+                        .setScale(DcrConstants.DECIMALDIGITS_MEASUREMENTS, DcrConstants.ROUNDMODE_MEASUREMENTS);
 
             }
-            LOG.error("dimDecimal : " + dimDecimal);
+            LOG.error("dimDecimal : " + textValue);
             // LOG.error("Dimension text : " + text2);
             if (values.size() == 1) {
-                if (values.get(0).compareTo(dimDecimal) == 0) {
+                if (values.get(0).compareTo(textValue) == 0) {
                     LOG.debug("Proper Dimension found");
-                } else if (values.get(0).compareTo(dimDecimal.subtract(BigDecimal.valueOf(0.2d))) == 0) {
+                    dimensionValues.add(values.get(0));
+                } else if (values.get(0).compareTo(textValue.subtract(BigDecimal.valueOf(0.4d))) == 0) {
                     BigDecimal actual = values.get(0).add(BigDecimal.valueOf(0.2d));
                     values.remove(0);
-                    values.add(actual);
+                    dimensionValues.add(actual);
+                    LOG.debug("Proper Dimension found");
+                } else {
+                    planDetail.getErrors().put(layerName + "-" + DcrConstants.DIMENSION_EDITED,
+                            "Dimension " + text2 + " marked in layer " + layerName + " is edited.");
+                }
+            } else if (specialValues.size() == 1) {
+                if (specialValues.get(0).compareTo(textValue) == 0) {
+                    LOG.debug("Next proper Dimension found");
+                    dimensionValues.add(specialValues.get(0));
+                } else if (specialValues.get(0).compareTo(textValue.subtract(BigDecimal.valueOf(0.4d))) == 0) {
+                    BigDecimal actual = specialValues.get(0).add(BigDecimal.valueOf(0.2d));
+                    specialValues.remove(0);
+                    dimensionValues.add(actual);
+                    LOG.debug("Proper Dimension found");
+                } else {
+                    planDetail.getErrors().put(layerName + "-" + DcrConstants.DIMENSION_EDITED,
+                            "Dimension " + text2 + " marked in layer " + layerName + " is edited.");
+                }
+
+            } else if (byWeight.size() == 1) {
+                if (byWeight.get(0).compareTo(textValue) == 0) {
+                    LOG.debug("Next proper Dimension found");
+                    dimensionValues.add(byWeight.get(0));
+                } else if (byWeight.get(0).compareTo(textValue.subtract(BigDecimal.valueOf(0.4d))) == 0) {
+                    BigDecimal actual = byWeight.get(0).add(BigDecimal.valueOf(0.2d));
+                    byWeight.remove(0);
+                    dimensionValues.add(actual);
                     LOG.debug("Proper Dimension found");
                 } else {
                     planDetail.getErrors().put(layerName + "-" + DcrConstants.DIMENSION_EDITED,
@@ -415,14 +476,13 @@ public class Util {
             } else {
                 if (!planDetail.getErrors().containsKey(layerName + "-" + DcrConstants.DIMENSION_LINES_STANDARD))
                     planDetail.getErrors().put(layerName + "-" + DcrConstants.DIMENSION_LINES_STANDARD, "Dimension "
-                            + text2 + " marked in layer " + layerName + " is not as per defined standard.");
+                            + text2 + " marked in layer " + layerName + " is not as per DIGIT-DCR defined standard.");
             }
         }
     }
-    
+
     /**
-     * Extract the all dimension values and will map as key, value pairs
-     * Key: Color Code, Value: List of dimension values
+     * Extract the all dimension values and will map as key, value pairs Key: Color Code, Value: List of dimension values
      * @param dxfDocument
      * @param name
      * @return
@@ -443,7 +503,7 @@ public class Util {
                 for (Object dxfEntity : dxfLineEntities) {
                     DXFDimension line = (DXFDimension) dxfEntity;
                     List<BigDecimal> values = new ArrayList<>();
-                    if(dimensionValues.containsKey(line.getColor())) {
+                    if (dimensionValues.containsKey(line.getColor())) {
                         extractDimensionValue(planDetail, values, line, dxfLayer.getName());
                         List<BigDecimal> existValues = dimensionValues.get(line.getColor());
                         existValues.addAll(values);
@@ -474,40 +534,37 @@ public class Util {
                         inch = new BigDecimal(inchSplit[0].replaceAll("[^\\d]", "")).add(inchDecimalvalue);
                     }
                 } else {
-                	if (split[1].contains("/")) {
-	                        String[] fractionSplit = split[1].split("/");
-	                        inch = new BigDecimal(fractionSplit[0])
-	                                .divide(new BigDecimal(fractionSplit[1].replaceAll("[^\\d]", "")));
-	                }
-                	else
-                    inch = new BigDecimal(split[1].replaceAll("[^\\d.]", ""));
+                    if (split[1].contains("/")) {
+                        String[] fractionSplit = split[1].split("/");
+                        inch = new BigDecimal(fractionSplit[0])
+                                .divide(new BigDecimal(fractionSplit[1].replaceAll("[^\\d]", "")));
+                    } else
+                        inch = new BigDecimal(split[1].replaceAll("[^\\d.]", ""));
                 }
                 BigDecimal feetToInch = new BigDecimal(split[0]).multiply(BigDecimal.valueOf(12));
                 return feetToInch.add(inch);
             } else if (split[0].contains("\"")) {
                 return new BigDecimal(split[0].replaceAll("[^\\d]", ""));
             }
-		} else {
-			if (text2.contains(" ") && text2.contains("/")) {
-				String[] inchSplit = text2.split(" ");
-				if (inchSplit.length > 1) {
-					String[] fractionSplit = inchSplit[1].split("/");
-					BigDecimal inchDecimalvalue = new BigDecimal(fractionSplit[0])
-							.divide(new BigDecimal(fractionSplit[1].replaceAll("[^\\d]", "")));
-					return new BigDecimal(inchSplit[0].replaceAll("[^\\d]", "")).add(inchDecimalvalue);
-				}
-			} else if (text2.contains("/")) {
-				String[] fractionSplit = text2.split("/");
-				return new BigDecimal(fractionSplit[0])
-						.divide(new BigDecimal(fractionSplit[1].replaceAll("[^\\d]", "")));
-			} else
-				return new BigDecimal(text2.replaceAll("[^\\d]", ""));
-		}
+        } else {
+            if (text2.contains(" ") && text2.contains("/")) {
+                String[] inchSplit = text2.split(" ");
+                if (inchSplit.length > 1) {
+                    String[] fractionSplit = inchSplit[1].split("/");
+                    BigDecimal inchDecimalvalue = new BigDecimal(fractionSplit[0])
+                            .divide(new BigDecimal(fractionSplit[1].replaceAll("[^\\d]", "")));
+                    return new BigDecimal(inchSplit[0].replaceAll("[^\\d]", "")).add(inchDecimalvalue);
+                }
+            } else if (text2.contains("/")) {
+                String[] fractionSplit = text2.split("/");
+                return new BigDecimal(fractionSplit[0])
+                        .divide(new BigDecimal(fractionSplit[1].replaceAll("[^\\d]", "")));
+            } else
+                return new BigDecimal(text2.replaceAll("[^\\d]", ""));
+        }
 
         return new BigDecimal(text2.replaceAll("[^\\d]", "")).multiply(BigDecimal.valueOf(12));
     }
-    
-    
 
     public static List<BigDecimal> getListOfDimensionValueByLayer(PlanDetail planDetail, String name) {
         DXFDocument dxfDocument = planDetail.getDoc();
@@ -938,66 +995,75 @@ public class Util {
         if (name == null)
             return null;
         name = name.toUpperCase();
-        BigDecimal value = BigDecimal.ZERO;
 
-        DXFLayer dxfLayer = dxfDocument.getDXFLayer(name);
-        if (dxfLayer.getName().equalsIgnoreCase(name)) {
-            List dxfLineEntities = dxfLayer.getDXFEntities(DXFConstants.ENTITY_TYPE_DIMENSION);
+        if (!pl.getStrictlyValidateDimension()) {
+            BigDecimal value = BigDecimal.ZERO;
 
-            if (null != dxfLineEntities)
-                for (Object dxfEntity : dxfLineEntities) {
+            DXFLayer dxfLayer = dxfDocument.getDXFLayer(name);
+            if (dxfLayer.getName().equalsIgnoreCase(name)) {
+                List dxfLineEntities = dxfLayer.getDXFEntities(DXFConstants.ENTITY_TYPE_DIMENSION);
 
-                    DXFDimension line = (DXFDimension) dxfEntity;
-                    String dimensionBlock = line.getDimensionBlock();
-                    // String dimensionBlock = line.getDimensionBlock();
-                    DXFBlock dxfBlock = dxfDocument.getDXFBlock(dimensionBlock);
-                    Iterator dxfEntitiesIterator = dxfBlock.getDXFEntitiesIterator();
-                    while (dxfEntitiesIterator.hasNext()) {
-                        DXFEntity e = (DXFEntity) dxfEntitiesIterator.next();
-                        if (e.getType().equals(DXFConstants.ENTITY_TYPE_MTEXT)) {
-                            DXFMText text = (DXFMText) e;
-                            String text2 = text.getText();
+                if (null != dxfLineEntities)
+                    for (Object dxfEntity : dxfLineEntities) {
 
-                            Iterator styledParagraphIterator = text.getTextDocument().getStyledParagraphIterator();
+                        DXFDimension line = (DXFDimension) dxfEntity;
+                        String dimensionBlock = line.getDimensionBlock();
+                        DXFBlock dxfBlock = dxfDocument.getDXFBlock(dimensionBlock);
+                        Iterator dxfEntitiesIterator = dxfBlock.getDXFEntitiesIterator();
+                        while (dxfEntitiesIterator.hasNext()) {
+                            DXFEntity e = (DXFEntity) dxfEntitiesIterator.next();
+                            if (e.getType().equals(DXFConstants.ENTITY_TYPE_MTEXT)) {
+                                DXFMText text = (DXFMText) e;
+                                String text2 = text.getText();
 
-                            while (styledParagraphIterator.hasNext()) {
-                                StyledTextParagraph next = (StyledTextParagraph) styledParagraphIterator.next();
-                                text2 = next.getText();
-                            }
+                                Iterator styledParagraphIterator = text.getTextDocument().getStyledParagraphIterator();
 
-                            if (pl.getDrawingPreference() != null &&
-                                    org.egov.infra.utils.StringUtils.isNotBlank(pl.getDrawingPreference().getUom())
-                                    && (DxfFileConstants.INCH_UOM.equalsIgnoreCase(pl.getDrawingPreference().getUom())
-                                            || DxfFileConstants.FEET_UOM.equalsIgnoreCase(pl.getDrawingPreference().getUom()))
-                                    && StringUtils.isNotBlank(text2)) {
-                                value = convertToInch(text2);
-                            } else {
-                            if (text2.contains(";")) {
-                                String[] textSplit = text2.split(";");
-                                int length = textSplit.length;
+                                while (styledParagraphIterator.hasNext()) {
+                                    StyledTextParagraph next = (StyledTextParagraph) styledParagraphIterator.next();
+                                    text2 = next.getText();
+                                }
 
-                                if (length >= 1) {
-                                    int index = length - 1;
-                                    text2 = textSplit[index];
-                                    text2 = text2.replaceAll("[^\\d.]", "");
+                                if (text2.contains(";")) {
+                                    String[] textSplit = text2.split(";");
+                                    int length = textSplit.length;
+
+                                    if (length >= 1) {
+                                        int index = length - 1;
+                                        text2 = textSplit[index];
+                                        text2 = text2.replaceAll("[^\\d.]", "");
+                                    } else
+                                        text2 = text2.replaceAll("[^\\d.]", "");
                                 } else
                                     text2 = text2.replaceAll("[^\\d.]", "");
-                            } else
-                                text2 = text2.replaceAll("[^\\d.]", "");
 
-                            if (!text2.isEmpty())
-                                value = BigDecimal.valueOf(Double.parseDouble(text2));
+                                if (!text2.isEmpty())
+                                    value = BigDecimal.valueOf(Double.parseDouble(text2));
 
-                        }
+                            }
                         }
                     }
+
+            }
+
+            return value;
+        } else {
+            List<BigDecimal> values = new ArrayList<>();
+            DXFLayer dxfLayer = dxfDocument.getDXFLayer(name);
+            if (dxfLayer.getName().equalsIgnoreCase(name)) {
+                List dxfLineEntities = dxfLayer.getDXFEntities(DXFConstants.ENTITY_TYPE_DIMENSION);
+
+                if (null != dxfLineEntities) {
+                    for (Object dxfEntity : dxfLineEntities) {
+                        DXFDimension line = (DXFDimension) dxfEntity;
+                        extractDimensionValue(pl, values, line, dxfLayer.getName());
+                    }
+                    return values.isEmpty() ? BigDecimal.ZERO : values.get(0);
                 }
 
+            }
+
         }
-        /*
-         * if (BigDecimal.ZERO.compareTo(value) == 0) pl.addError(name, "Dimension value is invalid for layer " + name);
-         */
-        return value;
+        return BigDecimal.ZERO;
 
     }
 
@@ -1554,5 +1620,9 @@ public class Util {
 
     public void setLayerNames(LayerNames layerNames) {
         this.layerNames = layerNames;
+    }
+    
+    public static double getSlope(Point startPoint, Point endPoint) {
+        return (endPoint.getY() - startPoint.getY()) / (endPoint.getX() - startPoint.getX());
     }
 }
