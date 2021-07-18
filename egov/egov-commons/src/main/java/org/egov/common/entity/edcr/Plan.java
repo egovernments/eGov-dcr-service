@@ -183,6 +183,7 @@ public class Plan implements Serializable {
     @Transient
     private Boolean strictlyValidateDimension = false;
     
+    @Transient
     private Boolean strictlyValidateBldgHeightDimension = false;
 
     private Gate gate;

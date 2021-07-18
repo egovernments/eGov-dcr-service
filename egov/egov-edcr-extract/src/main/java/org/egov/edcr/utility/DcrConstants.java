@@ -187,6 +187,10 @@ public class DcrConstants {
     public static final String DIMENSION_LINES_STANDARD = "Dimension lines standard";
     public static final String DIMENSION_EDITED = "Dimension edited";
     public static final String STRICTLY_VALIDATE_DIMENSION = "EDCR_STRICTLY_VALIDATE_DIMENSION";
+    public static final String STRICTLY_VALIDATE_BLDG_HGHT_DIMENSION = "EDCR_STRICTLY_VALIDATE_BLDG_HEIGHT_DIMENSION";
+    public static final String MDMS_STRICTLY_VALIDATE_DIMENSION = "STRICTLY_VALIDATE_DIMENSION";
+    public static final String MDMS_STRICTLY_VALIDATE_BLDG_HGHT_DIMENSION = "STRICTLY_VALIDATE_BLDG_HEIGHT_DIMENSION";
+    public static final String MDMS_EDCR_MODULE = "EDCR";
     public static final String PORTICO_DISTANCETO_EXTERIORWALL = "Block %s Portico %s Portico distance to exteriorwall";
 
 }
