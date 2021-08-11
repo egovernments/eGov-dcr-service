@@ -9,7 +9,7 @@
 # - 
 
 config:
--   name: builds/eGov-dcr-service/egov-edcr
+-   name: builds/digit-impel-builds/eGov-dcr-service/egov-edcr
     build:
     - work-dir: egov
       image-name: egov-edcr
