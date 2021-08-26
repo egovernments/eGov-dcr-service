@@ -427,6 +427,21 @@ public class EdcrRestService {
                     queryStr.append("and appln.serviceType=:servicetype ");
                     params.put("servicetype", edcrRequest.getApplicationSubType());
                 }
+                
+                if (isNotBlank(edcrRequest.getStatus())) {
+                    queryStr.append("and dtl.status=:status ");
+                    params.put("status", edcrRequest.getStatus());
+                }
+                
+                if (edcrRequest.getFromDate() != null) {
+                    queryStr.append("and appln.applicationDate>=:fromDate ");
+                    params.put("fromDate", edcrRequest.getFromDate().toString());
+                }
+                
+                if (edcrRequest.getToDate() != null) {
+                    queryStr.append("and appln.applicationDate>=:toDate ");
+                    params.put("toDate", edcrRequest.getToDate().toString());
+                }
 
                 queryStr.append(" order by appln.createddate desc)");
                 if (tenantItr.hasNext()) {
@@ -482,6 +497,13 @@ public class EdcrRestService {
             if (onlyTenantId && userInfo != null && isNotBlank(userId)) {
                 criteria.add(Restrictions.eq("application.thirdPartyUserCode", userId));
             }
+            
+            if (isNotBlank(edcrRequest.getStatus()))
+            	criteria.add(Restrictions.eq("edcrApplicationDetail.status", edcrRequest.getStatus()));
+            if (edcrRequest.getFromDate() != null)
+            	criteria.add(Restrictions.ge("application.applicationDate", edcrRequest.getFromDate()));
+            if (edcrRequest.getToDate() != null)
+            	criteria.add(Restrictions.le("application.applicationDate", edcrRequest.getToDate()));
 
             criteria.addOrder(Order.asc("edcrApplicationDetail.createdDate"));
             criteria.setResultTransformer(CriteriaSpecification.DISTINCT_ROOT_ENTITY);
