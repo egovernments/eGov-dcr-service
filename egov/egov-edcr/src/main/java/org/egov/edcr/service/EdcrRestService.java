@@ -85,6 +85,7 @@ import org.egov.edcr.utility.DcrConstants;
 import org.egov.infra.admin.master.entity.City;
 import org.egov.infra.admin.master.service.CityService;
 import org.egov.infra.config.core.ApplicationThreadLocals;
+import org.egov.infra.exception.ApplicationRuntimeException;
 import org.egov.infra.filestore.service.FileStoreService;
 import org.egov.infra.microservice.contract.RequestInfoWrapper;
 import org.egov.infra.microservice.contract.ResponseInfo;
@@ -348,11 +349,37 @@ public class EdcrRestService {
 		if (String.valueOf(applnDtls[7]) != null)
 			edcrDetail.setPlanReport(
 					format(getFileDownloadUrl(String.valueOf(applnDtls[7]), String.valueOf(applnDtls[0]))));
-		Plan pl1 = new Plan();
-		PlanInformation pi = new PlanInformation();
-		pi.setApplicantName(String.valueOf(applnDtls[4]));
-		pl1.setPlanInformation(pi);
-		edcrDetail.setPlanDetail(pl1);
+		File file = null;
+		try {
+			file = String.valueOf(applnDtls[8]) != null
+					? fileStoreService.fetch(String.valueOf(applnDtls[8]),
+							DcrConstants.APPLICATION_MODULE_TYPE, String.valueOf(applnDtls[0]))
+					: null;
+		} catch (ApplicationRuntimeException e) {
+			LOG.error("Error occurred, while fetching plan details!!!", e);
+		}
+
+		if (LOG.isInfoEnabled())
+			LOG.info("**************** End - Reading Plan detail file **************" + file);
+		try {
+			if (file == null) {
+				Plan pl1 = new Plan();
+				PlanInformation pi = new PlanInformation();
+				pi.setApplicantName(String.valueOf(applnDtls[4]));
+				pl1.setPlanInformation(pi);
+				edcrDetail.setPlanDetail(pl1);
+			} else {
+				ObjectMapper mapper = new ObjectMapper();
+				mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+				Plan pl1 = mapper.readValue(file, Plan.class);
+				pl1.getPlanInformation().setApplicantName(String.valueOf(applnDtls[4]));
+				if (LOG.isInfoEnabled())
+					LOG.info("**************** Plan detail object **************" + pl1);
+				edcrDetail.setPlanDetail(pl1);
+			}
+		} catch (IOException e) {
+			LOG.log(Level.ERROR, e);
+		}
 
 		edcrDetail.setTenantId(stateCityCode.concat(".").concat(String.valueOf(applnDtls[0])));
 
