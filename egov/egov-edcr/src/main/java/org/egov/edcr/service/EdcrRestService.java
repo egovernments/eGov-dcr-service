@@ -337,6 +337,11 @@ public class EdcrRestService {
 		edcrDetail.setStatus(String.valueOf(applnDtls[3]));
 		edcrDetail.setApplicationDate(new LocalDate(String.valueOf(applnDtls[9])).toDate());
 		edcrDetail.setApplicationNumber(String.valueOf(applnDtls[10]));
+		edcrDetail.setAppliactionType(String.valueOf(applnDtls[11]));
+		edcrDetail.setApplicationSubType(String.valueOf(applnDtls[12]));
+		edcrDetail.setPermitNumber(String.valueOf(applnDtls[13]));
+		if(applnDtls[14] != null)
+			edcrDetail.setPermitDate(new LocalDate(String.valueOf(applnDtls[14])).toDate());
 
 		if (String.valueOf(applnDtls[5]) != null)
 			edcrDetail
@@ -421,7 +426,7 @@ public class EdcrRestService {
 			while (tenantItr.hasNext()) {
 				Map.Entry<String, String> value = tenantItr.next();
 				queryStr.append("(select '").append(value.getKey()).append(
-						"' as tenantId,appln.transactionNumber,dtl.dcrNumber,dtl.status,appln.applicantName,dxf.fileStoreId as dxfFileId,scrudxf.fileStoreId as scrutinizedDxfFileId,rofile.fileStoreId as reportOutputId,pdfile.fileStoreId as planDetailFileStore,appln.applicationDate,appln.applicationNumber from ")
+						"' as tenantId,appln.transactionNumber,dtl.dcrNumber,dtl.status,appln.applicantName,dxf.fileStoreId as dxfFileId,scrudxf.fileStoreId as scrutinizedDxfFileId,rofile.fileStoreId as reportOutputId,pdfile.fileStoreId as planDetailFileStore,appln.applicationDate,appln.applicationNumber,appln.applicationType,appln.serviceType,appln.planPermitNumber,appln.permitApplicationDate from ")
 						.append(value.getKey()).append(".edcr_application appln, ").append(value.getKey())
 						.append(".edcr_application_detail dtl, ").append(value.getKey())
 						.append(".eg_filestoremap dxf, ").append(value.getKey()).append(".eg_filestoremap scrudxf, ")
@@ -457,7 +462,7 @@ public class EdcrRestService {
 						applicationType = ApplicationType.OCCUPANCY_CERTIFICATE;
 					}
 					queryStr.append("and appln.applicationType=:applicationtype ");
-					params.put("applicationtype", applicationType.toString());
+					params.put("applicationtype", applicationType == null ? "" : applicationType.name());
 				}
 
 				if (isNotBlank(edcrRequest.getApplicationSubType())) {
