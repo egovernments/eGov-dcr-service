@@ -78,6 +78,7 @@ import org.egov.edcr.contract.EdcrRequest;
 import org.egov.edcr.entity.ApplicationType;
 import org.egov.edcr.entity.EdcrApplication;
 import org.egov.edcr.entity.EdcrApplicationDetail;
+import org.egov.edcr.entity.EdcrPdfDetail;
 import org.egov.edcr.utility.DcrConstants;
 import org.egov.infra.admin.master.entity.City;
 import org.egov.infra.admin.master.service.CityService;
@@ -288,17 +289,18 @@ public class EdcrRestService {
             LOG.log(Level.ERROR, e);
         }
 
-        if (edcrApplnDtl.getDxfFileId() != null)
-            planPdfs.add(
-                    format(getFileDownloadUrl(
-                            edcrApplnDtl.getDxfFileId().getFileStoreId(),
-                            ApplicationThreadLocals.getTenantID())));
-
-        if (edcrApplnDtl.getReportOutputId() != null)
-            planPdfs.add(format(
-                    getFileDownloadUrl(edcrApplnDtl.getReportOutputId().getFileStoreId(),
-                            ApplicationThreadLocals.getTenantID())));
-
+        for(EdcrPdfDetail planPdf : edcrApplnDtl.getEdcrPdfDetails()) {
+            if (planPdf.getConvertedPdf() != null) {
+                String downloadURL = format(getFileDownloadUrl(
+                        planPdf.getConvertedPdf().getFileStoreId(),
+                        ApplicationThreadLocals.getTenantID()));
+                planPdfs.add(planPdf.getLayer().concat(" - ").concat(downloadURL));
+                for(org.egov.common.entity.edcr.EdcrPdfDetail pdf : edcrDetail.getPlanDetail().getEdcrPdfDetails()) {
+                    if(planPdf.getLayer().equalsIgnoreCase(pdf.getLayer()))
+                        pdf.setDownloadURL(downloadURL);
+                }
+            }
+        }
         edcrDetail.setPlanPdfs(planPdfs);
         edcrDetail.setTenantId(edcrRequest.getTenantId());
 

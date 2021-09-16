@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,7 @@ import org.egov.common.entity.bpa.SubOccupancy;
 import org.egov.common.entity.bpa.Usage;
 import org.egov.common.entity.dcr.helper.OccupancyHelperDetail;
 import org.egov.common.entity.edcr.Block;
+import org.egov.common.entity.edcr.EdcrPdfDetail;
 import org.egov.common.entity.edcr.Floor;
 import org.egov.common.entity.edcr.Measurement;
 import org.egov.common.entity.edcr.Occupancy;
@@ -1621,8 +1623,110 @@ public class Util {
     public void setLayerNames(LayerNames layerNames) {
         this.layerNames = layerNames;
     }
-    
+
     public static double getSlope(Point startPoint, Point endPoint) {
         return (endPoint.getY() - startPoint.getY()) / (endPoint.getX() - startPoint.getX());
+    }
+
+    public static Point getMidPoint(DXFVertex line1, DXFVertex line2) {
+
+        return new Point((line1.getX() + line2.getX()) / 2, (line1.getY() + line2.getY()) / 2, 0d);
+    }
+
+    public static String getTexForDimension(String text) {
+        String[] split = text.split(" X ");
+        if (split.length > 4) {
+            return text;
+        } else if (split.length == 4) {
+            Set<String> set = new HashSet();
+            set.add(split[0]);
+            set.add(split[1]);
+            set.add(split[2]);
+            set.add(split[3]);
+            String[] a = new String[2];
+            if (set.size() == 2) {
+                set.toArray(a);
+                return a[0] + " X " + a[1];
+            } else {
+                return text;
+            }
+        } else
+            return text;
+
+    }
+
+    public static Point findCentroid(DXFEntity e) {
+
+        DXFPolyline pline = (DXFPolyline) e;
+        Iterator vertexIterator = pline.getVertexIterator();
+        double x = 0, y = 0;
+        double centroidX = 0, centroidY = 0;
+        DXFVertex p;
+        DXFVertex first = null, point1 = null;
+        StringBuilder text = new StringBuilder(50);
+        while (vertexIterator.hasNext()) {
+            if (point1 == null) {
+                point1 = (DXFVertex) vertexIterator.next();
+                first = point1;
+            }
+            p = (DXFVertex) vertexIterator.next();
+
+            x += p.getX();
+            y += p.getY();
+
+            text.append(p.getLength());
+            if (vertexIterator.hasNext())
+                text.append(" X ");
+        }
+
+        centroidX = x / pline.getVertexCount();
+        centroidY = y / pline.getVertexCount();
+        return new Point(centroidX, centroidY, 0);
+
+    }
+
+    public static String getDimensionText(DXFEntity e) {
+        DXFPolyline pline = (DXFPolyline) e;
+        Iterator vertexIterator = pline.getVertexIterator();
+        DXFVertex p;
+        StringBuilder text = new StringBuilder(50);
+        while (vertexIterator.hasNext()) {
+            p = (DXFVertex) vertexIterator.next();
+            text.append(p.getLength());
+            if (vertexIterator.hasNext())
+                text.append(" X ");
+        }
+
+        return text.toString();
+    }
+
+    public static String getPolylinePrintableText(DXFPolyline pline, DXFLayer dxfLayer, EdcrPdfDetail detail, PlanDetail pl) {
+
+        OccupancyTypeHelper occupancyType = null;
+        String name = null;
+        
+        if (pline.getColor() != 0) {
+            occupancyType = findOccupancyType((DXFLWPolyline) pline, pl);
+        }
+        if (occupancyType != null) {
+            String occupancyName = "";
+                if (occupancyType.getSubtype() != null)
+                    occupancyName = occupancyType.getSubtype().getName();
+                else {
+                    if (occupancyType.getType() != null)
+                        occupancyName = occupancyType.getType().getName();
+                }
+            LOG.info("returning Occupancy " + occupancyName);
+            return occupancyName;
+
+        } else {
+            name = dxfLayer.getName();
+            name = name.replace("BLK_", "");
+            name = name.replace("FLR_", "");
+            name.replace("NO_", "");
+            name.replaceAll("[^\\d.]", "");
+            LOG.info("returning layer name " + name);
+            return name;
+        }
     }
 }

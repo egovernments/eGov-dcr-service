@@ -176,8 +176,6 @@ public class Plan implements Serializable {
     @Transient
     private String dxfFileName;
 
-    @Transient
-    @JsonIgnore
     private List<EdcrPdfDetail> edcrPdfDetails;
 
     @Transient

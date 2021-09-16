@@ -36,6 +36,16 @@ public class EDCRMdmsUtil {
         masterDetailDimensionConfig.setName("DimensionConfig");
         masterDetailDimensionConfig.setFilter("$.*");
         edcrMasterDtls.add(masterDetailDimensionConfig);
+        
+        MasterDetail masterDetailDxfToPdfConfig = new MasterDetail();
+        masterDetailDxfToPdfConfig.setName("DxfToPdfConfig");
+        masterDetailDxfToPdfConfig.setFilter("$.*");
+        edcrMasterDtls.add(masterDetailDxfToPdfConfig);
+        
+        MasterDetail masterDetailDxfToPdfLayerConfig = new MasterDetail();
+        masterDetailDxfToPdfLayerConfig.setName("DxfToPdfLayerConfig");
+        masterDetailDxfToPdfLayerConfig.setFilter("$.*");
+        edcrMasterDtls.add(masterDetailDxfToPdfLayerConfig);
 
         ModuleDetail edcrModuleDtls = new ModuleDetail();
         edcrModuleDtls.setMasterDetails(edcrMasterDtls);
