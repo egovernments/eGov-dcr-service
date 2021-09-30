@@ -157,7 +157,7 @@ public class DxfToPdfConverterExtract extends FeatureExtract {
             List<AppConfigValues> dxfToPdfAppConfigEnabled = appConfigValueService
                     .getConfigValuesByModuleAndKey(DcrConstants.APPLICATION_MODULE_TYPE, DcrConstants.DXF_PDF_CONVERSION_ENABLED);
 
-            if (!dxfToPdfAppConfigEnabled.isEmpty() && dxfToPdfAppConfigEnabled.get(0).getValue().equals("NO"))
+            if (!dxfToPdfAppConfigEnabled.isEmpty() && dxfToPdfAppConfigEnabled.get(0).getValue().equalsIgnoreCase("NO"))
                 return planDetail;
         }
 
@@ -1138,25 +1138,13 @@ public class DxfToPdfConverterExtract extends FeatureExtract {
             // pdfLayers.add(pdfdetail);
             // pdfdetail.getPrintNameLayers().add("All");
         } else if (appConfigValue.contains("BLK_*")) {
-            int i = 0;
             String[] split = layerNamesRegEx.split(","); // split by comma
             for (Block b : planDetail.getBlocks()) {
-
-                /*
-                 * for (SetBack setback : b.getSetBacks()) { sheetNameFinal = sheetName.replace("BLK_*", "BLK_" + b.getNumber());
-                 * sheetNameFinal = sheetNameFinal.replace("LVL_*", "LVL_" + setback.getLevel()); // sheetNameFinal = //
-                 * sheetNameFinal.substring(0,sheetNameFinal.indexOf(":")); pdfdetail = new EdcrPdfDetail();
-                 * pdfdetail.setPageSize(page); pdfdetail.setLayer(sheetNameFinal); evaluate = true; for (String s : split) { s =
-                 * s.replace("BLK_*", "BLK_" + b.getNumber()); s = s.replace("LVL_*", "LVL_" + setback.getLevel());
-                 * getLayerColorConfigs(planDetail, pdfdetail, s); s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") :
-                 * s.length()); List<String> layer = Util.getLayerNamesLike(planDetail.getDxfDocument(), s); if (layer != null &&
-                 * !layer.isEmpty()) { if (pdfdetail.getLayers() == null || pdfdetail.getLayers().isEmpty()) {
-                 * pdfdetail.setLayers(layer); } else { pdfdetail.getLayers().addAll(layer); } } } pdfLayers.add(pdfdetail); }
-                 */
-
                 for (Floor f : b.getBuilding().getFloors()) {
                     sheetNameFinal = sheetName.replace("BLK_*", "BLK_" + b.getNumber());
                     sheetNameFinal = sheetNameFinal.replace("FLR_*", "FLR_" + f.getNumber());
+                    sheetNameFinal = sheetNameFinal.replace("LVL_*", "LVL_" + f.getNumber());
+                    sheetNameFinal = sheetNameFinal.replace("_*", "_" + b.getNumber());
                     // sheetNameFinal =
                     // sheetNameFinal.substring(0,sheetNameFinal.indexOf(":"));
                     pdfdetail = new EdcrPdfDetail();
@@ -1166,6 +1154,8 @@ public class DxfToPdfConverterExtract extends FeatureExtract {
                     for (String s : split) {
                         s = s.replace("BLK_*", "BLK_" + b.getNumber());
                         s = s.replace("FLR_*", "FLR_" + f.getNumber());
+                        s = s.replace("LVL_*", "LVL_" + f.getNumber());
+                        s = s.replace("_*", "_" + b.getNumber());
                         getLayerColorConfigs(planDetail, pdfdetail, s);
                         s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") : s.length());
 
@@ -1210,14 +1200,30 @@ public class DxfToPdfConverterExtract extends FeatureExtract {
             }
 
         } else {
-            pdfdetail = new EdcrPdfDetail();
-            pdfdetail.setPageSize(page);
-            pdfdetail.setLayer(sheetNameFinal);
-            String[] split = layerNamesRegEx.split(",");
-            for (String s : split) {
-                getLayerColorConfigs(planDetail, pdfdetail, s);
-                s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") : s.length());
-                layers.addAll(Util.getLayerNamesLike(planDetail.getDxfDocument(), s));
+            if (layerNamesRegEx.contains("_*")) {
+                for (Block b : planDetail.getBlocks()) {
+                    pdfdetail = new EdcrPdfDetail();
+                    pdfdetail.setPageSize(page);
+                    pdfdetail.setLayer(sheetNameFinal);
+                    String[] split = layerNamesRegEx.split(",");
+                    for (String s : split) {
+                        s = s.replace("_*", "_" + b.getNumber());
+                        getLayerColorConfigs(planDetail, pdfdetail, s);
+                        s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") : s.length());
+                        layers.addAll(Util.getLayerNamesLike(planDetail.getDxfDocument(), s));
+                    }
+                }
+            } else {
+                pdfdetail = new EdcrPdfDetail();
+                pdfdetail.setPageSize(page);
+                pdfdetail.setLayer(sheetNameFinal);
+                String[] split = layerNamesRegEx.split(",");
+                for (String s : split) {
+
+                    getLayerColorConfigs(planDetail, pdfdetail, s);
+                    s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") : s.length());
+                    layers.addAll(Util.getLayerNamesLike(planDetail.getDxfDocument(), s));
+                }
             }
 
         }
@@ -1234,164 +1240,152 @@ public class DxfToPdfConverterExtract extends FeatureExtract {
 
     private List<EdcrPdfDetail> getPdfLayerNames(PlanDetail planDetail, DxfToPdfLayerConfig config) {
         List<EdcrPdfDetail> pdfLayers = new ArrayList<>();
-        /*int noOfSheets = 1;
-        if (config.getSheetName().contains("NO_*")) {
-            String layerRegEx = config.getSheetName().replace("NO_*", "NO_" + "-?\\d+");
-            List<String> layerss = Util.getLayerNamesLike(planDetail.getDxfDocument(), layerRegEx);
-            noOfSheets = layerss.size();
-        }
+        boolean evaluate = false;
+        EdcrPdfDetail pdfdetail = new EdcrPdfDetail();
+        List<String> layers = new ArrayList<>();
+        String sheetName = config.getSheetName();
+        String layerNamesRegEx = "";
+        String sheetNameFinal = "";
+        PdfPageSize page = new PdfPageSize();
+        // Name_of_the_sheet,PageSize,multiplication_factor_of_Page_Size,#Layer_regex:Measurement(M)/Dimension(D)LayerNametoInclude(L)ColorCode(C1),Repeat
 
-        for (int i = 1; i <= noOfSheets; i++) {*/
-            boolean evaluate = false;
-            EdcrPdfDetail pdfdetail = new EdcrPdfDetail();
-            List<String> layers = new ArrayList<>();
-            String sheetName = config.getSheetName();
-            String layerNamesRegEx = "";
-            String sheetNameFinal = "";
-            PdfPageSize page = new PdfPageSize();
-            // Name_of_the_sheet,PageSize,multiplication_factor_of_Page_Size,#Layer_regex:Measurement(M)/Dimension(D)LayerNametoInclude(L)ColorCode(C1),Repeat
+        // BLK_*_FLR_*_FLOOR_PLAN,A0,1#BLK_*_FLR_*_FLOOR_PLAN,BLK_*_FLR_*_BLT_UP_AREA:ML,BLK_*_FLR_*_BLT_UP_AREA_DEDUCT:DL
+        // SITE_PLAN,A0,1#SITE_PLAN
+        // PARKING_PLAN_NO_*,A1,1#PARKING_PLAN_NO_*,PARKING_SLOT:M
+        // BLK_*_FLR_*_UNIT_FA,A0,1#BLK_*_FLR_*_BLT_UP_AREA:ML,BLK_*_FLR_*_BLT_UP_AREA_DEDUCT:DL,BLK_*_FLR_*_UNITFA:M
+        // COMPLETE_PLAN,A0,4#*
 
-            // BLK_*_FLR_*_FLOOR_PLAN,A0,1#BLK_*_FLR_*_FLOOR_PLAN,BLK_*_FLR_*_BLT_UP_AREA:ML,BLK_*_FLR_*_BLT_UP_AREA_DEDUCT:DL
-            // SITE_PLAN,A0,1#SITE_PLAN
-            // PARKING_PLAN_NO_*,A1,1#PARKING_PLAN_NO_*,PARKING_SLOT:M
-            // BLK_*_FLR_*_UNIT_FA,A0,1#BLK_*_FLR_*_BLT_UP_AREA:ML,BLK_*_FLR_*_BLT_UP_AREA_DEDUCT:DL,BLK_*_FLR_*_UNITFA:M
-            // COMPLETE_PLAN,A0,4#*
+        // set page size
+        page.setSize(config.getSheetSize());
+        page.setEnlarge(config.getSheetSizeEnlargeFactor());
 
-            // set page size
-            page.setSize(config.getSheetSize());
-            page.setEnlarge(config.getSheetSizeEnlargeFactor());
+        page.setOrientation(config.getOrientation());
+        page.setRemoveHatch(config.isRemoveHatch());
+        pdfdetail.setPageSize(page);
 
-            page.setOrientation(config.getOrientation());
-            page.setRemoveHatch(config.isRemoveHatch());
+        layers = new ArrayList<>();
+        String layerRegEx = constructIntoSingleLineConfig(config);
+        if (layerRegEx.contains("COMPLETE_PLAN")) {
+            pdfdetail = new EdcrPdfDetail();
             pdfdetail.setPageSize(page);
 
-            layers = new ArrayList<>();
-            String layerRegEx = constructIntoSingleLineConfig(config);
-            //for (PlanPdfLayerConfig planLayer : config.getPlanPdfLayerConfigs()) {
-                //layerNamesRegEx = planLayer.getLayerName();
-                if (layerRegEx.contains("COMPLETE_PLAN")) {
+            sheetNameFinal = sheetName;
+            pdfdetail.setLayer(sheetNameFinal);
+            layers.add("All");
+            pdfdetail.setLayers(layers);
+        } else if (layerRegEx.contains("BLK_*")) {
+            String[] split = layerRegEx.split(","); // split by comma
+            layerNamesRegEx = split[0];
+            for (Block b : planDetail.getBlocks()) {
 
+                for (Floor f : b.getBuilding().getFloors()) {
+                    sheetNameFinal = sheetName.replace("BLK_*", "BLK_" + b.getNumber());
+                    sheetNameFinal = sheetNameFinal.replace("FLR_*", "FLR_" + f.getNumber());
+                    sheetNameFinal = sheetNameFinal.replace("LVL_*", "LVL_" + f.getNumber());
+                    sheetNameFinal = sheetNameFinal.replace("_*", "_" + b.getNumber());
+                    // sheetNameFinal =
+                    // sheetNameFinal.substring(0,sheetNameFinal.indexOf(":"));
                     pdfdetail = new EdcrPdfDetail();
                     pdfdetail.setPageSize(page);
-
-                    sheetNameFinal = sheetName;
                     pdfdetail.setLayer(sheetNameFinal);
-                    layers.add("All");
-                    pdfdetail.setLayers(layers);
-                } else if (layerRegEx.contains("BLK_*")) {
-                    
-
-                    int i = 1;
-                    String[] split = layerRegEx.split(","); // split by comma
-                    layerNamesRegEx = split[0];
-                    for (Block b : planDetail.getBlocks()) {
-
-                        /*
-                         * for (SetBack setback : b.getSetBacks()) { sheetNameFinal = sheetName.replace("BLK_*", "BLK_" + b.getNumber());
-                         * sheetNameFinal = sheetNameFinal.replace("LVL_*", "LVL_" + setback.getLevel()); // sheetNameFinal = //
-                         * sheetNameFinal.substring(0,sheetNameFinal.indexOf(":")); pdfdetail = new EdcrPdfDetail();
-                         * pdfdetail.setPageSize(page); pdfdetail.setLayer(sheetNameFinal); evaluate = true; for (String s : split) { s =
-                         * s.replace("BLK_*", "BLK_" + b.getNumber()); s = s.replace("LVL_*", "LVL_" + setback.getLevel());
-                         * getLayerColorConfigs(planDetail, pdfdetail, s); s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") :
-                         * s.length()); List<String> layer = Util.getLayerNamesLike(planDetail.getDxfDocument(), s); if (layer != null &&
-                         * !layer.isEmpty()) { if (pdfdetail.getLayers() == null || pdfdetail.getLayers().isEmpty()) {
-                         * pdfdetail.setLayers(layer); } else { pdfdetail.getLayers().addAll(layer); } } } pdfLayers.add(pdfdetail); }
-                         */
-
-                        for (Floor f : b.getBuilding().getFloors()) {
-                            sheetNameFinal = sheetName.replace("BLK_*", "BLK_" + b.getNumber());
-                            sheetNameFinal = sheetNameFinal.replace("FLR_*", "FLR_" + f.getNumber());
-                            // sheetNameFinal =
-                            // sheetNameFinal.substring(0,sheetNameFinal.indexOf(":"));
-                            pdfdetail = new EdcrPdfDetail();
-                            pdfdetail.setPageSize(page);
-                            pdfdetail.setLayer(sheetNameFinal);
-                            evaluate = true;
-                            for (String s : split) {
-                                s = s.replace("BLK_*", "BLK_" + b.getNumber());
-                                s = s.replace("FLR_*", "FLR_" + f.getNumber());
-                                s = s.replace("NO_*", "NO_" + i);
-                                getLayerColorConfigs(planDetail, pdfdetail, s);
-                                s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") : s.length());
-
-                                List<String> layer = Util.getLayerNamesLike(planDetail.getDxfDocument(), s);
-                                
-                                if (layer != null && !layer.isEmpty()) {
-                                    if(pdfdetail.getLayer().contains("NO_*"))
-                                        pdfdetail.setLayer(layer.get(0));
-                                    if (pdfdetail.getLayers() == null || pdfdetail.getLayers().isEmpty()) {
-                                        pdfdetail.setLayers(layer);
-                                    } else {
-                                        pdfdetail.getLayers().addAll(layer);
-                                    }
-
-                                }
-                            }
-                            pdfLayers.add(pdfdetail);
-
-                        }
-                    }
-                
-                } else if (layerRegEx.contains("NO_*")) {
-                    
-                    pdfdetail = new EdcrPdfDetail();
-                    pdfdetail.setPageSize(page);
-                    int i = 1;
-                    String[] split = layerRegEx.split(",");
+                    evaluate = true;
                     for (String s : split) {
-
+                        s = s.replace("BLK_*", "BLK_" + b.getNumber());
+                        s = s.replace("FLR_*", "FLR_" + f.getNumber());
+                        s = s.replace("LVL_*", "LVL_" + f.getNumber());
+                        s = s.replace("_*", "_" + b.getNumber());
                         getLayerColorConfigs(planDetail, pdfdetail, s);
                         s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") : s.length());
-                        s = s.replace("NO_*", "NO_" + i);
-                        pdfdetail.setLayer(s);
+
                         List<String> layer = Util.getLayerNamesLike(planDetail.getDxfDocument(), s);
+
                         if (layer != null && !layer.isEmpty()) {
                             if (pdfdetail.getLayers() == null || pdfdetail.getLayers().isEmpty()) {
                                 pdfdetail.setLayers(layer);
                             } else {
                                 pdfdetail.getLayers().addAll(layer);
                             }
-
                         }
                     }
                     pdfLayers.add(pdfdetail);
-                
-                } else {
+
+                }
+            }
+
+        } else if (layerRegEx.contains("NO_*")) {
+
+            pdfdetail = new EdcrPdfDetail();
+            pdfdetail.setPageSize(page);
+            int i = 1;
+            String[] split = layerRegEx.split(",");
+            for (String s : split) {
+
+                getLayerColorConfigs(planDetail, pdfdetail, s);
+                s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") : s.length());
+                s = s.replace("NO_*", "NO_" + i);
+                pdfdetail.setLayer(s);
+                List<String> layer = Util.getLayerNamesLike(planDetail.getDxfDocument(), s);
+                if (layer != null && !layer.isEmpty()) {
+                    if (pdfdetail.getLayers() == null || pdfdetail.getLayers().isEmpty()) {
+                        pdfdetail.setLayers(layer);
+                    } else {
+                        pdfdetail.getLayers().addAll(layer);
+                    }
+
+                }
+            }
+            pdfLayers.add(pdfdetail);
+
+        } else {
+            if (layerRegEx.contains("_*")) {
+                for (Block b : planDetail.getBlocks()) {
                     pdfdetail = new EdcrPdfDetail();
                     pdfdetail.setPageSize(page);
                     pdfdetail.setLayer(sheetNameFinal);
                     String[] split = layerRegEx.split(",");
                     for (String s : split) {
+                        s = s.replace("_*", "_" + b.getNumber());
                         getLayerColorConfigs(planDetail, pdfdetail, s);
                         s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") : s.length());
                         layers.addAll(Util.getLayerNamesLike(planDetail.getDxfDocument(), s));
                     }
-
                 }
-                if (!layers.isEmpty()) {
-                    pdfdetail.setLayer(layers.get(0));
-                    pdfdetail.setLayers(layers);
-                    pdfLayers.add(pdfdetail);
+            } else {
+                pdfdetail = new EdcrPdfDetail();
+                pdfdetail.setPageSize(page);
+                pdfdetail.setLayer(sheetNameFinal);
+                String[] split = layerRegEx.split(",");
+                for (String s : split) {
+                    getLayerColorConfigs(planDetail, pdfdetail, s);
+                    s = s.substring(0, s.indexOf(":") != -1 ? s.indexOf(":") : s.length());
+                    layers.addAll(Util.getLayerNamesLike(planDetail.getDxfDocument(), s));
                 }
-        //}
+            }
+        }
+        if (!layers.isEmpty()) {
+            pdfdetail.setLayer(layers.get(0));
+            pdfdetail.setLayers(layers);
+            pdfLayers.add(pdfdetail);
+        }
+        // }
 
         return pdfLayers;
 
     }
-    
+
     private String constructIntoSingleLineConfig(DxfToPdfLayerConfig config) {
         StringBuilder layerRegEx = new StringBuilder();
         Iterator<PlanPdfLayerConfig> itr = config.getPlanPdfLayerConfigs().iterator();
         while (itr.hasNext()) {
             PlanPdfLayerConfig pc = itr.next();
             layerRegEx = layerRegEx.append(pc.getLayerName());
-            if(pc.getLayerType() != null)
+            if (pc.getLayerType() != null)
                 layerRegEx = layerRegEx.append(":").append(pc.getLayerType());
-            if(pc.getOverrideColor() != 0)
+            if (pc.getOverrideColor() != 0)
                 layerRegEx = layerRegEx.append(pc.getOverrideColor());
-            if(pc.getOverrideThickness() != 0)
+            if (pc.getOverrideThickness() != 0)
                 layerRegEx = layerRegEx.append(pc.getOverrideThickness());
-            if(itr.hasNext())
+            if (itr.hasNext())
                 layerRegEx = layerRegEx.append(",");
         }
         return layerRegEx.toString();
